@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Distributed RL Training Platform</title>
+    <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/recharts@2.8.0/umd/Recharts.min.js"></script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-tertiary: #1a1a25;
+            --accent-green: #00ff88;
+            --accent-blue: #00d4ff;
+            --accent-purple: #a855f7;
+            --accent-red: #ff4444;
+            --accent-yellow: #fbbf24;
+            --text-primary: #ffffff;
+            --text-secondary: #9ca3af;
+            --border: #2a2a3a;
+        }
+
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .noise-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            opacity: 0.03;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+            z-index: 1000;
+        }
+
+        .grid-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image:
+                linear-gradient(rgba(0, 255, 136, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 255, 136, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            pointer-events: none;
+        }
+
+        #root {
+            position: relative;
+            z-index: 1;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="noise-overlay"></div>
+    <div class="grid-bg"></div>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useCallback } = React;
+        const { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } = Recharts;
+
+        const API_URL = window.location.hostname === 'localhost'
+            ? 'http://localhost:8000'
+            : '/api';
+
+        // Styles as JS objects
+        const styles = {
+            container: {
+                padding: '24px',
+                maxWidth: '1600px',
+                margin: '0 auto',
+            },
+            header: {
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '32px',
+                paddingBottom: '24px',
+                borderBottom: '1px solid #2a2a3a',
+            },
+            title: {
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: '28px',
+                fontWeight: 700,
+                background: 'linear-gradient(135deg, #00ff88, #00d4ff)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                letterSpacing: '-1px',
+            },
+            statusBadge: (isRunning) => ({
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 16px',
+                borderRadius: '20px',
+                background: isRunning ? 'rgba(0, 255, 136, 0.1)' : 'rgba(255, 68, 68, 0.1)',
+                border: `1px solid ${isRunning ? '#00ff88' : '#ff4444'}`,
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: '13px',
+            }),
+            statusDot: (isRunning) => ({
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                background: isRunning ? '#00ff88' : '#ff4444',
+                animation: isRunning ? 'pulse 2s infinite' : 'none',
+            }),
+            grid: {
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                gap: '20px',
+                marginBottom: '24px',
+            },
+            card: {
+                background: 'linear-gradient(135deg, #12121a 0%, #1a1a25 100%)',
+                borderRadius: '16px',
+                padding: '24px',
+                border: '1px solid #2a2a3a',
+                position: 'relative',
+                overflow: 'hidden',
+            },
+            cardTitle: {
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: '12px',
+                textTransform: 'uppercase',
+                letterSpacing: '2px',
+                color: '#9ca3af',
+                marginBottom: '16px',
+            },
+            metricValue: {
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: '36px',
+                fontWeight: 700,
+                color: '#00ff88',
+            },
+            button: (variant = 'primary') => ({
+                padding: '12px 24px',
+                borderRadius: '8px',
+                border: variant === 'primary' ? 'none' : '1px solid #2a2a3a',
+                background: variant === 'primary'
+                    ? 'linear-gradient(135deg, #00ff88, #00d4ff)'
+                    : 'transparent',
+                color: variant === 'primary' ? '#0a0a0f' : '#ffffff',
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+            }),
+            select: {
+                padding: '12px 16px',
+                borderRadius: '8px',
+                border: '1px solid #2a2a3a',
+                background: '#12121a',
+                color: '#ffffff',
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: '14px',
+                cursor: 'pointer',
+                minWidth: '180px',
+            },
+            input: {
+                padding: '12px 16px',
+                borderRadius: '8px',
+                border: '1px solid #2a2a3a',
+                background: '#12121a',
+                color: '#ffffff',
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: '14px',
+                width: '80px',
+            },
+            chartContainer: {
+                background: 'linear-gradient(135deg, #12121a 0%, #1a1a25 100%)',
+                borderRadius: '16px',
+                padding: '24px',
+                border: '1px solid #2a2a3a',
+                marginBottom: '24px',
+            },
+            controlsRow: {
+                display: 'flex',
+                gap: '16px',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                marginBottom: '24px',
+            },
+            label: {
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: '12px',
+                color: '#9ca3af',
+                marginBottom: '6px',
+                display: 'block',
+            },
+        };
+
+        // Add keyframes via style tag
+        const styleSheet = document.createElement('style');
+        styleSheet.textContent = `
+            @keyframes pulse {
+                0%, 100% { opacity: 1; transform: scale(1); }
+                50% { opacity: 0.5; transform: scale(1.2); }
+            }
+            button:hover { transform: translateY(-2px); box-shadow: 0 4px 20px rgba(0, 255, 136, 0.3); }
+            select:focus, input:focus { outline: none; border-color: #00ff88; }
+        `;
+        document.head.appendChild(styleSheet);
+
+        function App() {
+            const [status, setStatus] = useState({ is_running: false, env_name: 'CartPole-v1', num_actors: 0 });
+            const [metrics, setMetrics] = useState([]);
+            const [summary, setSummary] = useState(null);
+            const [envName, setEnvName] = useState('CartPole-v1');
+            const [numActors, setNumActors] = useState(4);
+            const [hyperparams, setHyperparams] = useState({ lr: 0.0003, gamma: 0.99 });
+            const [loading, setLoading] = useState(false);
+
+            const environments = [
+                { name: 'CartPole-v1', label: 'CartPole' },
+                { name: 'LunarLander-v2', label: 'Lunar Lander' },
+                { name: 'Acrobot-v1', label: 'Acrobot' },
+                { name: 'MountainCar-v0', label: 'Mountain Car' },
+            ];
+
+            const fetchStatus = useCallback(async () => {
+                try {
+                    const res = await fetch(`${API_URL}/api/status`);
+                    const data = await res.json();
+                    setStatus(data);
+                } catch (e) {
+                    console.log('Status fetch error:', e);
+                }
+            }, []);
+
+            const fetchMetrics = useCallback(async () => {
+                try {
+                    const res = await fetch(`${API_URL}/api/metrics`);
+                    const data = await res.json();
+                    setMetrics(data.metrics || []);
+                    setSummary(data.summary);
+                } catch (e) {
+                    console.log('Metrics fetch error:', e);
+                }
+            }, []);
+
+            useEffect(() => {
+                fetchStatus();
+                fetchMetrics();
+                const interval = setInterval(() => {
+                    fetchStatus();
+                    fetchMetrics();
+                }, 2000);
+                return () => clearInterval(interval);
+            }, [fetchStatus, fetchMetrics]);
+
+            const startTraining = async () => {
+                setLoading(true);
+                try {
+                    await fetch(`${API_URL}/api/training/start?env_name=${envName}&num_actors=${numActors}`, {
+                        method: 'POST'
+                    });
+                    await fetchStatus();
+                } catch (e) {
+                    console.error(e);
+                }
+                setLoading(false);
+            };
+
+            const stopTraining = async () => {
+                setLoading(true);
+                try {
+                    await fetch(`${API_URL}/api/training/stop`, { method: 'POST' });
+                    await fetchStatus();
+                } catch (e) {
+                    console.error(e);
+                }
+                setLoading(false);
+            };
+
+            const updateHyperparam = async (key, value) => {
+                try {
+                    await fetch(`${API_URL}/api/config/hyperparam?key=${key}&value=${value}`, {
+                        method: 'POST'
+                    });
+                    setHyperparams(prev => ({ ...prev, [key]: value }));
+                } catch (e) {
+                    console.error(e);
+                }
+            };
+
+            const scaleActors = async (count) => {
+                try {
+                    await fetch(`${API_URL}/api/scale?count=${count}`, { method: 'POST' });
+                    await fetchStatus();
+                } catch (e) {
+                    console.error(e);
+                }
+            };
+
+            const chartData = metrics.map((m, i) => ({
+                step: m.update || i,
+                reward: m.avg_reward || 0,
+                loss: (m.policy_loss || 0) * 100,
+            }));
+
+            return (
+                <div style={styles.container}>
+                    {/* Header */}
+                    <header style={styles.header}>
+                        <h1 style={styles.title}>DISTRIBUTED RL PLATFORM</h1>
+                        <div style={styles.statusBadge(status.is_running)}>
+                            <div style={styles.statusDot(status.is_running)} />
+                            {status.is_running ? 'TRAINING' : 'IDLE'}
+                        </div>
+                    </header>
+
+                    {/* Controls */}
+                    <div style={styles.controlsRow}>
+                        <div>
+                            <label style={styles.label}>ENVIRONMENT</label>
+                            <select
+                                style={styles.select}
+                                value={envName}
+                                onChange={(e) => setEnvName(e.target.value)}
+                                disabled={status.is_running}
+                            >
+                                {environments.map(env => (
+                                    <option key={env.name} value={env.name}>{env.label}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label style={styles.label}>ACTORS</label>
+                            <input
+                                type="number"
+                                style={styles.input}
+                                value={numActors}
+                                onChange={(e) => setNumActors(parseInt(e.target.value) || 1)}
+                                min="1"
+                                max="16"
+                                disabled={status.is_running}
+                            />
+                        </div>
+
+                        <div style={{ marginTop: '20px' }}>
+                            {!status.is_running ? (
+                                <button
+                                    style={styles.button('primary')}
+                                    onClick={startTraining}
+                                    disabled={loading}
+                                >
+                                    {loading ? 'STARTING...' : '▶ START TRAINING'}
+                                </button>
+                            ) : (
+                                <button
+                                    style={{ ...styles.button('secondary'), borderColor: '#ff4444', color: '#ff4444' }}
+                                    onClick={stopTraining}
+                                    disabled={loading}
+                                >
+                                    {loading ? 'STOPPING...' : '■ STOP'}
+                                </button>
+                            )}
+                        </div>
+
+                        {status.is_running && (
+                            <div style={{ marginTop: '20px', marginLeft: 'auto' }}>
+                                <button
+                                    style={styles.button('secondary')}
+                                    onClick={() => scaleActors(status.num_actors + 1)}
+                                >
+                                    + ACTOR
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Metrics Cards */}
+                    <div style={styles.grid}>
+                        <div style={styles.card}>
+                            <div style={styles.cardTitle}>AVG REWARD</div>
+                            <div style={styles.metricValue}>
+                                {summary?.avg_reward?.toFixed(1) || '0.0'}
+                            </div>
+                        </div>
+
+                        <div style={styles.card}>
+                            <div style={styles.cardTitle}>UPDATES</div>
+                            <div style={{ ...styles.metricValue, color: '#00d4ff' }}>
+                                {summary?.updates || 0}
+                            </div>
+                        </div>
+
+                        <div style={styles.card}>
+                            <div style={styles.cardTitle}>EXPERIENCES</div>
+                            <div style={{ ...styles.metricValue, color: '#a855f7' }}>
+                                {(summary?.total_experiences || 0).toLocaleString()}
+                            </div>
+                        </div>
+
+                        <div style={styles.card}>
+                            <div style={styles.cardTitle}>ACTIVE ACTORS</div>
+                            <div style={{ ...styles.metricValue, color: '#fbbf24' }}>
+                                {status.num_actors || 0}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Reward Chart */}
+                    <div style={styles.chartContainer}>
+                        <div style={styles.cardTitle}>REWARD CURVE</div>
+                        <ResponsiveContainer width="100%" height={300}>
+                            <AreaChart data={chartData}>
+                                <defs>
+                                    <linearGradient id="rewardGradient" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#00ff88" stopOpacity={0.3} />
+                                        <stop offset="95%" stopColor="#00ff88" stopOpacity={0} />
+                                    </linearGradient>
+                                </defs>
+                                <XAxis
+                                    dataKey="step"
+                                    stroke="#4a4a5a"
+                                    tick={{ fill: '#9ca3af', fontFamily: 'JetBrains Mono', fontSize: 11 }}
+                                />
+                                <YAxis
+                                    stroke="#4a4a5a"
+                                    tick={{ fill: '#9ca3af', fontFamily: 'JetBrains Mono', fontSize: 11 }}
+                                />
+                                <Tooltip
+                                    contentStyle={{
+                                        background: '#1a1a25',
+                                        border: '1px solid #2a2a3a',
+                                        borderRadius: '8px',
+                                        fontFamily: 'JetBrains Mono',
+                                    }}
+                                />
+                                <Area
+                                    type="monotone"
+                                    dataKey="reward"
+                                    stroke="#00ff88"
+                                    fill="url(#rewardGradient)"
+                                    strokeWidth={2}
+                                />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </div>
+
+                    {/* Hyperparameters */}
+                    <div style={styles.card}>
+                        <div style={styles.cardTitle}>HYPERPARAMETERS</div>
+                        <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+                            <div>
+                                <label style={styles.label}>LEARNING RATE</label>
+                                <input
+                                    type="number"
+                                    style={{ ...styles.input, width: '120px' }}
+                                    value={hyperparams.lr}
+                                    onChange={(e) => updateHyperparam('lr', parseFloat(e.target.value))}
+                                    step="0.0001"
+                                />
+                            </div>
+                            <div>
+                                <label style={styles.label}>GAMMA</label>
+                                <input
+                                    type="number"
+                                    style={{ ...styles.input, width: '100px' }}
+                                    value={hyperparams.gamma}
+                                    onChange={(e) => updateHyperparam('gamma', parseFloat(e.target.value))}
+                                    step="0.01"
+                                    min="0"
+                                    max="1"
+                                />
+                            </div>
+                            <div>
+                                <label style={styles.label}>POLICY LOSS</label>
+                                <div style={{ ...styles.metricValue, fontSize: '20px', color: '#ff4444' }}>
+                                    {summary?.policy_loss?.toFixed(4) || '0.0000'}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+
+</html>
