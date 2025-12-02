@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rl-actor
+  namespace: default
+spec:
+  replicas: 0  # Start with 0, scale via API
+  selector:
+    matchLabels:
+      app: rl-actor
+  template:
+    metadata:
+      labels:
+        app: rl-actor
+    spec:
+      containers:
+        - name: actor
+          image: rl-platform/actor:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ACTOR_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: ENV_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: rl-config
+                  key: ENV_NAME
+            - name: KAFKA_BOOTSTRAP
+              valueFrom:
+                configMapKeyRef:
+                  name: rl-config
+                  key: KAFKA_BOOTSTRAP
+            - name: WEIGHTS_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: rl-config
+                  key: WEIGHTS_PATH
+          volumeMounts:
+            - name: shared-storage
+              mountPath: /shared
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+      volumes:
+        - name: shared-storage
+          persistentVolumeClaim:
+            claimName: rl-shared-storage

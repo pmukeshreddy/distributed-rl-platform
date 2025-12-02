@@ -1,0 +1,82 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: rl-api
+  namespace: default
+spec:
+  type: NodePort
+  ports:
+    - port: 8000
+      targetPort: 8000
+      nodePort: 30080
+  selector:
+    app: rl-api
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rl-api
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rl-api
+  template:
+    metadata:
+      labels:
+        app: rl-api
+    spec:
+      serviceAccountName: rl-api-sa
+      containers:
+        - name: api
+          image: rl-platform/api:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: KAFKA_BOOTSTRAP
+              valueFrom:
+                configMapKeyRef:
+                  name: rl-config
+                  key: KAFKA_BOOTSTRAP
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: rl-api-sa
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: rl-api-role
+  namespace: default
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments", "deployments/scale"]
+    verbs: ["get", "list", "patch", "update"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: rl-api-rolebinding
+  namespace: default
+subjects:
+  - kind: ServiceAccount
+    name: rl-api-sa
+    namespace: default
+roleRef:
+  kind: Role
+  name: rl-api-role
+  apiGroup: rbac.authorization.k8s.io

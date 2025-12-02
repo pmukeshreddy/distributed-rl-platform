@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rl-learner
+  namespace: default
+spec:
+  replicas: 0  # Start with 0, scale via API
+  selector:
+    matchLabels:
+      app: rl-learner
+  template:
+    metadata:
+      labels:
+        app: rl-learner
+    spec:
+      containers:
+        - name: learner
+          image: rl-platform/learner:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ENV_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: rl-config
+                  key: ENV_NAME
+            - name: KAFKA_BOOTSTRAP
+              valueFrom:
+                configMapKeyRef:
+                  name: rl-config
+                  key: KAFKA_BOOTSTRAP
+            - name: WEIGHTS_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: rl-config
+                  key: WEIGHTS_PATH
+            - name: BATCH_SIZE
+              valueFrom:
+                configMapKeyRef:
+                  name: rl-config
+                  key: BATCH_SIZE
+          volumeMounts:
+            - name: shared-storage
+              mountPath: /shared
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "2000m"
+              # Uncomment for GPU:
+              # nvidia.com/gpu: 1
+      volumes:
+        - name: shared-storage
+          persistentVolumeClaim:
+            claimName: rl-shared-storage

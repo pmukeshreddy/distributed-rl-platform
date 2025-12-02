@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rl-config
+  namespace: default
+data:
+  ENV_NAME: "CartPole-v1"
+  KAFKA_BOOTSTRAP: "kafka:9092"
+  WEIGHTS_PATH: "/shared/model.pt"
+  BATCH_SIZE: "2048"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rl-shared-storage
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Gi
