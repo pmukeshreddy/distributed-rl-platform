@@ -8,7 +8,6 @@
     <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/recharts@2.8.0/umd/Recharts.min.js"></script>
     <link
         href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap"
         rel="stylesheet">
@@ -70,6 +69,63 @@
             position: relative;
             z-index: 1;
         }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 0.5;
+                transform: scale(1.2);
+            }
+        }
+
+        @keyframes progressPulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.7;
+            }
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(0, 255, 136, 0.3);
+        }
+
+        select:focus,
+        input:focus {
+            outline: none;
+            border-color: #00ff88;
+        }
+
+        .log-entry {
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .progress-bar-fill {
+            animation: progressPulse 1.5s ease-in-out infinite;
+        }
     </style>
 </head>
 
@@ -79,14 +135,12 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useCallback } = React;
-        const { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } = Recharts;
+        const { useState, useEffect, useCallback, useRef } = React;
 
         const API_URL = window.location.hostname === 'localhost'
             ? 'http://localhost:8000'
             : '/api';
 
-        // Styles as JS objects
         const styles = {
             container: {
                 padding: '24px',
@@ -212,19 +266,94 @@
                 marginBottom: '6px',
                 display: 'block',
             },
+            progressContainer: {
+                background: '#1a1a25',
+                borderRadius: '8px',
+                height: '24px',
+                overflow: 'hidden',
+                position: 'relative',
+            },
+            progressBar: (percent) => ({
+                height: '100%',
+                width: `${percent}%`,
+                background: 'linear-gradient(90deg, #00ff88, #00d4ff)',
+                borderRadius: '8px',
+                transition: 'width 0.5s ease-out',
+            }),
+            progressText: {
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: '11px',
+                color: '#ffffff',
+                textShadow: '0 0 4px rgba(0,0,0,0.8)',
+            },
+            logContainer: {
+                background: '#0a0a0f',
+                borderRadius: '8px',
+                padding: '16px',
+                height: '200px',
+                overflowY: 'auto',
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: '12px',
+            },
+            logEntry: (type) => ({
+                padding: '6px 0',
+                borderBottom: '1px solid #1a1a25',
+                display: 'flex',
+                gap: '12px',
+                color: type === 'reward' ? '#00ff88' : type === 'update' ? '#00d4ff' : type === 'error' ? '#ff4444' : '#9ca3af',
+            }),
+            logTime: {
+                color: '#4a4a5a',
+                minWidth: '70px',
+            },
         };
 
-        // Add keyframes via style tag
-        const styleSheet = document.createElement('style');
-        styleSheet.textContent = `
-            @keyframes pulse {
-                0%, 100% { opacity: 1; transform: scale(1); }
-                50% { opacity: 0.5; transform: scale(1.2); }
-            }
-            button:hover { transform: translateY(-2px); box-shadow: 0 4px 20px rgba(0, 255, 136, 0.3); }
-            select:focus, input:focus { outline: none; border-color: #00ff88; }
-        `;
-        document.head.appendChild(styleSheet);
+        function ProgressBar({ current, target, label }) {
+            const percent = target > 0 ? Math.min((current / target) * 100, 100) : 0;
+            return (
+                <div style={{ marginBottom: '16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                        <span style={{ color: '#9ca3af', fontFamily: "'JetBrains Mono', monospace", fontSize: '12px' }}>{label}</span>
+                        <span style={{ color: '#00ff88', fontFamily: "'JetBrains Mono', monospace", fontSize: '12px' }}>{current.toLocaleString()} / {target.toLocaleString()}</span>
+                    </div>
+                    <div style={styles.progressContainer}>
+                        <div style={styles.progressBar(percent)} className="progress-bar-fill" />
+                        <div style={styles.progressText}>{percent.toFixed(1)}%</div>
+                    </div>
+                </div>
+            );
+        }
+
+        function TrainingLog({ logs }) {
+            const logRef = useRef(null);
+
+            useEffect(() => {
+                if (logRef.current) {
+                    logRef.current.scrollTop = logRef.current.scrollHeight;
+                }
+            }, [logs]);
+
+            return (
+                <div style={styles.logContainer} ref={logRef}>
+                    {logs.length === 0 ? (
+                        <div style={{ color: '#4a4a5a', textAlign: 'center', paddingTop: '80px' }}>
+                            Waiting for training logs...
+                        </div>
+                    ) : (
+                        logs.map((log, i) => (
+                            <div key={i} style={styles.logEntry(log.type)} className="log-entry">
+                                <span style={styles.logTime}>{log.time}</span>
+                                <span>{log.message}</span>
+                            </div>
+                        ))
+                    )}
+                </div>
+            );
+        }
 
         function App() {
             const [status, setStatus] = useState({ is_running: false, env_name: 'CartPole-v1', num_actors: 0 });
@@ -234,6 +363,8 @@
             const [numActors, setNumActors] = useState(4);
             const [hyperparams, setHyperparams] = useState({ lr: 0.0003, gamma: 0.99 });
             const [loading, setLoading] = useState(false);
+            const [logs, setLogs] = useState([]);
+            const [batchProgress, setBatchProgress] = useState({ current: 0, target: 2048 });
 
             const environments = [
                 { name: 'CartPole-v1', label: 'CartPole' },
@@ -241,6 +372,11 @@
                 { name: 'Acrobot-v1', label: 'Acrobot' },
                 { name: 'MountainCar-v0', label: 'Mountain Car' },
             ];
+
+            const addLog = useCallback((type, message) => {
+                const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+                setLogs(prev => [...prev.slice(-50), { type, message, time }]);
+            }, []);
 
             const fetchStatus = useCallback(async () => {
                 try {
@@ -256,12 +392,27 @@
                 try {
                     const res = await fetch(`${API_URL}/api/metrics`);
                     const data = await res.json();
+
+                    if (data.metrics && data.metrics.length > metrics.length) {
+                        const newMetrics = data.metrics.slice(metrics.length);
+                        newMetrics.forEach(m => {
+                            addLog('update', `Update #${m.update} | Loss: ${m.policy_loss?.toFixed(4)} | Reward: ${m.avg_reward?.toFixed(2)}`);
+                        });
+                    }
+
                     setMetrics(data.metrics || []);
                     setSummary(data.summary);
+
+                    if (data.summary) {
+                        setBatchProgress({
+                            current: (data.summary.total_experiences || 0) % 2048,
+                            target: 2048
+                        });
+                    }
                 } catch (e) {
                     console.log('Metrics fetch error:', e);
                 }
-            }, []);
+            }, [metrics.length, addLog]);
 
             useEffect(() => {
                 fetchStatus();
@@ -269,18 +420,22 @@
                 const interval = setInterval(() => {
                     fetchStatus();
                     fetchMetrics();
-                }, 2000);
+                }, 1000);
                 return () => clearInterval(interval);
             }, [fetchStatus, fetchMetrics]);
 
             const startTraining = async () => {
                 setLoading(true);
+                setLogs([]);
+                addLog('info', `Starting training on ${envName} with ${numActors} actors...`);
                 try {
                     await fetch(`${API_URL}/api/training/start?env_name=${envName}&num_actors=${numActors}`, {
                         method: 'POST'
                     });
+                    addLog('info', 'Training started successfully!');
                     await fetchStatus();
                 } catch (e) {
+                    addLog('error', `Failed to start: ${e.message}`);
                     console.error(e);
                 }
                 setLoading(false);
@@ -288,10 +443,13 @@
 
             const stopTraining = async () => {
                 setLoading(true);
+                addLog('info', 'Stopping training...');
                 try {
                     await fetch(`${API_URL}/api/training/stop`, { method: 'POST' });
+                    addLog('info', 'Training stopped.');
                     await fetchStatus();
                 } catch (e) {
+                    addLog('error', `Failed to stop: ${e.message}`);
                     console.error(e);
                 }
                 setLoading(false);
@@ -303,6 +461,7 @@
                         method: 'POST'
                     });
                     setHyperparams(prev => ({ ...prev, [key]: value }));
+                    addLog('info', `Updated ${key} = ${value}`);
                 } catch (e) {
                     console.error(e);
                 }
@@ -311,17 +470,12 @@
             const scaleActors = async (count) => {
                 try {
                     await fetch(`${API_URL}/api/scale?count=${count}`, { method: 'POST' });
+                    addLog('info', `Scaled actors to ${count}`);
                     await fetchStatus();
                 } catch (e) {
                     console.error(e);
                 }
             };
-
-            const chartData = metrics.map((m, i) => ({
-                step: m.update || i,
-                reward: m.avg_reward || 0,
-                loss: (m.policy_loss || 0) * 100,
-            }));
 
             return (
                 <div style={styles.container}>
@@ -395,6 +549,34 @@
                         )}
                     </div>
 
+                    {/* Progress Section */}
+                    {status.is_running && (
+                        <div style={{ ...styles.card, marginBottom: '24px' }}>
+                            <div style={styles.cardTitle}>TRAINING PROGRESS</div>
+                            <ProgressBar
+                                current={batchProgress.current}
+                                target={batchProgress.target}
+                                label="BATCH BUFFER"
+                            />
+                            <ProgressBar
+                                current={summary?.total_experiences || 0}
+                                target={100000}
+                                label="TOTAL EXPERIENCES"
+                            />
+                            <div style={{ display: 'flex', gap: '24px', marginTop: '16px', flexWrap: 'wrap' }}>
+                                <div style={{ color: '#9ca3af', fontSize: '12px', fontFamily: "'JetBrains Mono', monospace" }}>
+                                    Updates: <span style={{ color: '#00d4ff' }}>{summary?.updates || 0}</span>
+                                </div>
+                                <div style={{ color: '#9ca3af', fontSize: '12px', fontFamily: "'JetBrains Mono', monospace" }}>
+                                    Exp/sec: <span style={{ color: '#a855f7' }}>{((summary?.total_experiences || 0) / Math.max(1, summary?.updates || 1) * 0.5).toFixed(0)}</span>
+                                </div>
+                                <div style={{ color: '#9ca3af', fontSize: '12px', fontFamily: "'JetBrains Mono', monospace" }}>
+                                    Avg Reward: <span style={{ color: '#00ff88' }}>{summary?.avg_reward?.toFixed(2) || '0.00'}</span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Metrics Cards */}
                     <div style={styles.grid}>
                         <div style={styles.card}>
@@ -426,43 +608,10 @@
                         </div>
                     </div>
 
-                    {/* Reward Chart */}
+                    {/* Training Log */}
                     <div style={styles.chartContainer}>
-                        <div style={styles.cardTitle}>REWARD CURVE</div>
-                        <ResponsiveContainer width="100%" height={300}>
-                            <AreaChart data={chartData}>
-                                <defs>
-                                    <linearGradient id="rewardGradient" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor="#00ff88" stopOpacity={0.3} />
-                                        <stop offset="95%" stopColor="#00ff88" stopOpacity={0} />
-                                    </linearGradient>
-                                </defs>
-                                <XAxis
-                                    dataKey="step"
-                                    stroke="#4a4a5a"
-                                    tick={{ fill: '#9ca3af', fontFamily: 'JetBrains Mono', fontSize: 11 }}
-                                />
-                                <YAxis
-                                    stroke="#4a4a5a"
-                                    tick={{ fill: '#9ca3af', fontFamily: 'JetBrains Mono', fontSize: 11 }}
-                                />
-                                <Tooltip
-                                    contentStyle={{
-                                        background: '#1a1a25',
-                                        border: '1px solid #2a2a3a',
-                                        borderRadius: '8px',
-                                        fontFamily: 'JetBrains Mono',
-                                    }}
-                                />
-                                <Area
-                                    type="monotone"
-                                    dataKey="reward"
-                                    stroke="#00ff88"
-                                    fill="url(#rewardGradient)"
-                                    strokeWidth={2}
-                                />
-                            </AreaChart>
-                        </ResponsiveContainer>
+                        <div style={styles.cardTitle}>TRAINING LOG</div>
+                        <TrainingLog logs={logs} />
                     </div>
 
                     {/* Hyperparameters */}
