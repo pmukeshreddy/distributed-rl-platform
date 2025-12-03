@@ -8,16 +8,9 @@
     <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>
-    <link
-        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap"
-        rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
             --bg-primary: #0a0a0f;
             --bg-secondary: #12121a;
@@ -31,7 +24,6 @@
             --text-secondary: #9ca3af;
             --border: #2a2a3a;
         }
-
         body {
             font-family: 'Space Grotesk', sans-serif;
             background: var(--bg-primary);
@@ -39,290 +31,150 @@
             min-height: 100vh;
             overflow-x: hidden;
         }
-
-        .noise-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            opacity: 0.03;
-            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-            z-index: 1000;
-        }
-
         .grid-bg {
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
             background-image:
                 linear-gradient(rgba(0, 255, 136, 0.03) 1px, transparent 1px),
                 linear-gradient(90deg, rgba(0, 255, 136, 0.03) 1px, transparent 1px);
             background-size: 50px 50px;
             pointer-events: none;
         }
-
-        #root {
-            position: relative;
-            z-index: 1;
-        }
-
+        #root { position: relative; z-index: 1; }
         @keyframes pulse {
-
-            0%,
-            100% {
-                opacity: 1;
-                transform: scale(1);
-            }
-
-            50% {
-                opacity: 0.5;
-                transform: scale(1.2);
-            }
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
         }
-
-        @keyframes progressPulse {
-
-            0%,
-            100% {
-                opacity: 1;
-            }
-
-            50% {
-                opacity: 0.7;
-            }
+        @keyframes progressMove {
+            0% { background-position: 0 0; }
+            100% { background-position: 40px 0; }
         }
-
         @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateX(-10px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateX(0);
-            }
+            from { opacity: 0; transform: translateX(-10px); }
+            to { opacity: 1; transform: translateX(0); }
         }
-
-        button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 20px rgba(0, 255, 136, 0.3);
+        button:hover { transform: translateY(-2px); box-shadow: 0 4px 20px rgba(0, 255, 136, 0.3); }
+        select:focus, input:focus { outline: none; border-color: #00ff88; }
+        .log-entry { animation: slideIn 0.3s ease-out; }
+        .progress-animated {
+            background: linear-gradient(
+                90deg,
+                #00ff88 0%, #00d4ff 50%, #00ff88 100%
+            );
+            background-size: 200% 100%;
+            animation: progressMove 1s linear infinite;
         }
-
-        select:focus,
-        input:focus {
-            outline: none;
-            border-color: #00ff88;
-        }
-
-        .log-entry {
-            animation: slideIn 0.3s ease-out;
-        }
-
-        .progress-bar-fill {
-            animation: progressPulse 1.5s ease-in-out infinite;
+        .tqdm-bar {
+            font-family: 'JetBrains Mono', monospace;
+            background: #0a0a0f;
+            padding: 12px 16px;
+            border-radius: 8px;
+            border: 1px solid #2a2a3a;
+            margin-bottom: 12px;
         }
     </style>
 </head>
 
 <body>
-    <div class="noise-overlay"></div>
     <div class="grid-bg"></div>
     <div id="root"></div>
 
     <script type="text/babel">
         const { useState, useEffect, useCallback, useRef } = React;
 
-        const API_URL = window.location.hostname === 'localhost'
-            ? 'http://localhost:8000'
-            : '/api';
+        const API_URL = window.location.hostname === 'localhost' ? 'http://localhost:8000' : '/api';
 
         const styles = {
-            container: {
-                padding: '24px',
-                maxWidth: '1600px',
-                margin: '0 auto',
-            },
+            container: { padding: '24px', maxWidth: '1600px', margin: '0 auto' },
             header: {
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: '32px',
-                paddingBottom: '24px',
-                borderBottom: '1px solid #2a2a3a',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                marginBottom: '32px', paddingBottom: '24px', borderBottom: '1px solid #2a2a3a'
             },
             title: {
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: '28px',
-                fontWeight: 700,
+                fontFamily: "'JetBrains Mono', monospace", fontSize: '28px', fontWeight: 700,
                 background: 'linear-gradient(135deg, #00ff88, #00d4ff)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                letterSpacing: '-1px',
+                WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent'
             },
             statusBadge: (isRunning) => ({
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '8px 16px',
+                display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px',
                 borderRadius: '20px',
                 background: isRunning ? 'rgba(0, 255, 136, 0.1)' : 'rgba(255, 68, 68, 0.1)',
                 border: `1px solid ${isRunning ? '#00ff88' : '#ff4444'}`,
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: '13px',
+                fontFamily: "'JetBrains Mono', monospace", fontSize: '13px'
             }),
             statusDot: (isRunning) => ({
-                width: '8px',
-                height: '8px',
-                borderRadius: '50%',
+                width: '8px', height: '8px', borderRadius: '50%',
                 background: isRunning ? '#00ff88' : '#ff4444',
-                animation: isRunning ? 'pulse 2s infinite' : 'none',
+                animation: isRunning ? 'pulse 2s infinite' : 'none'
             }),
             grid: {
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-                gap: '20px',
-                marginBottom: '24px',
+                display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                gap: '20px', marginBottom: '24px'
             },
             card: {
                 background: 'linear-gradient(135deg, #12121a 0%, #1a1a25 100%)',
-                borderRadius: '16px',
-                padding: '24px',
-                border: '1px solid #2a2a3a',
-                position: 'relative',
-                overflow: 'hidden',
+                borderRadius: '16px', padding: '24px', border: '1px solid #2a2a3a'
             },
             cardTitle: {
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: '12px',
-                textTransform: 'uppercase',
-                letterSpacing: '2px',
-                color: '#9ca3af',
-                marginBottom: '16px',
+                fontFamily: "'JetBrains Mono', monospace", fontSize: '12px',
+                textTransform: 'uppercase', letterSpacing: '2px', color: '#9ca3af', marginBottom: '16px'
             },
             metricValue: {
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: '36px',
-                fontWeight: 700,
-                color: '#00ff88',
+                fontFamily: "'JetBrains Mono', monospace", fontSize: '36px', fontWeight: 700, color: '#00ff88'
             },
             button: (variant = 'primary') => ({
-                padding: '12px 24px',
-                borderRadius: '8px',
+                padding: '12px 24px', borderRadius: '8px',
                 border: variant === 'primary' ? 'none' : '1px solid #2a2a3a',
-                background: variant === 'primary'
-                    ? 'linear-gradient(135deg, #00ff88, #00d4ff)'
-                    : 'transparent',
+                background: variant === 'primary' ? 'linear-gradient(135deg, #00ff88, #00d4ff)' : 'transparent',
                 color: variant === 'primary' ? '#0a0a0f' : '#ffffff',
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: '13px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.2s',
+                fontFamily: "'JetBrains Mono', monospace", fontSize: '13px', fontWeight: 600, cursor: 'pointer'
             }),
             select: {
-                padding: '12px 16px',
-                borderRadius: '8px',
-                border: '1px solid #2a2a3a',
-                background: '#12121a',
-                color: '#ffffff',
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: '14px',
-                cursor: 'pointer',
-                minWidth: '180px',
+                padding: '12px 16px', borderRadius: '8px', border: '1px solid #2a2a3a',
+                background: '#12121a', color: '#ffffff',
+                fontFamily: "'JetBrains Mono', monospace", fontSize: '14px', minWidth: '180px'
             },
             input: {
-                padding: '12px 16px',
-                borderRadius: '8px',
-                border: '1px solid #2a2a3a',
-                background: '#12121a',
-                color: '#ffffff',
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: '14px',
-                width: '80px',
+                padding: '12px 16px', borderRadius: '8px', border: '1px solid #2a2a3a',
+                background: '#12121a', color: '#ffffff',
+                fontFamily: "'JetBrains Mono', monospace", fontSize: '14px', width: '80px'
             },
-            chartContainer: {
-                background: 'linear-gradient(135deg, #12121a 0%, #1a1a25 100%)',
-                borderRadius: '16px',
-                padding: '24px',
-                border: '1px solid #2a2a3a',
-                marginBottom: '24px',
-            },
-            controlsRow: {
-                display: 'flex',
-                gap: '16px',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                marginBottom: '24px',
-            },
-            label: {
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: '12px',
-                color: '#9ca3af',
-                marginBottom: '6px',
-                display: 'block',
-            },
-            progressContainer: {
-                background: '#1a1a25',
-                borderRadius: '8px',
-                height: '24px',
-                overflow: 'hidden',
-                position: 'relative',
-            },
-            progressBar: (percent) => ({
-                height: '100%',
-                width: `${percent}%`,
-                background: 'linear-gradient(90deg, #00ff88, #00d4ff)',
-                borderRadius: '8px',
-                transition: 'width 0.5s ease-out',
-            }),
-            progressText: {
-                position: 'absolute',
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%, -50%)',
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: '11px',
-                color: '#ffffff',
-                textShadow: '0 0 4px rgba(0,0,0,0.8)',
-            },
+            controlsRow: { display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '24px' },
+            label: { fontFamily: "'JetBrains Mono', monospace", fontSize: '12px', color: '#9ca3af', marginBottom: '6px', display: 'block' },
             logContainer: {
-                background: '#0a0a0f',
-                borderRadius: '8px',
-                padding: '16px',
-                height: '200px',
-                overflowY: 'auto',
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: '12px',
-            },
-            logEntry: (type) => ({
-                padding: '6px 0',
-                borderBottom: '1px solid #1a1a25',
-                display: 'flex',
-                gap: '12px',
-                color: type === 'reward' ? '#00ff88' : type === 'update' ? '#00d4ff' : type === 'error' ? '#ff4444' : '#9ca3af',
-            }),
-            logTime: {
-                color: '#4a4a5a',
-                minWidth: '70px',
-            },
+                background: '#0a0a0f', borderRadius: '8px', padding: '16px',
+                height: '180px', overflowY: 'auto', fontFamily: "'JetBrains Mono', monospace", fontSize: '12px'
+            }
         };
 
-        function ProgressBar({ current, target, label }) {
-            const percent = target > 0 ? Math.min((current / target) * 100, 100) : 0;
+        function formatTime(seconds) {
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = Math.floor(seconds % 60);
+            if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+            return `${m}:${s.toString().padStart(2, '0')}`;
+        }
+
+        function TqdmProgress({ current, total, label, rate, elapsed, extra }) {
+            const percent = total > 0 ? Math.min((current / total) * 100, 100) : 0;
+            const barWidth = 30;
+            const filled = Math.round((percent / 100) * barWidth);
+            const empty = barWidth - filled;
+            const bar = '█'.repeat(filled) + '░'.repeat(empty);
+            
             return (
-                <div style={{ marginBottom: '16px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                        <span style={{ color: '#9ca3af', fontFamily: "'JetBrains Mono', monospace", fontSize: '12px' }}>{label}</span>
-                        <span style={{ color: '#00ff88', fontFamily: "'JetBrains Mono', monospace", fontSize: '12px' }}>{current.toLocaleString()} / {target.toLocaleString()}</span>
-                    </div>
-                    <div style={styles.progressContainer}>
-                        <div style={styles.progressBar(percent)} className="progress-bar-fill" />
-                        <div style={styles.progressText}>{percent.toFixed(1)}%</div>
+                <div className="tqdm-bar">
+                    <div style={{ color: '#9ca3af', marginBottom: '4px', fontSize: '11px' }}>{label}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <span style={{ color: '#00ff88' }}>{percent.toFixed(0)}%</span>
+                        <span style={{ color: '#4a4a5a', letterSpacing: '-1px' }}>{bar}</span>
+                        <span style={{ color: '#9ca3af' }}>
+                            {current.toLocaleString()}/{total.toLocaleString()}
+                        </span>
+                        <span style={{ color: '#00d4ff' }}>[{formatTime(elapsed)}]</span>
+                        {rate > 0 && <span style={{ color: '#a855f7' }}>{rate.toFixed(1)} it/s</span>}
+                        {extra && <span style={{ color: '#fbbf24' }}>{extra}</span>}
                     </div>
                 </div>
             );
@@ -330,156 +182,134 @@
 
         function TrainingLog({ logs }) {
             const logRef = useRef(null);
-
             useEffect(() => {
-                if (logRef.current) {
-                    logRef.current.scrollTop = logRef.current.scrollHeight;
-                }
+                if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
             }, [logs]);
+
+            const getColor = (type) => {
+                switch(type) {
+                    case 'update': return '#00d4ff';
+                    case 'reward': return '#00ff88';
+                    case 'error': return '#ff4444';
+                    default: return '#9ca3af';
+                }
+            };
 
             return (
                 <div style={styles.logContainer} ref={logRef}>
                     {logs.length === 0 ? (
-                        <div style={{ color: '#4a4a5a', textAlign: 'center', paddingTop: '80px' }}>
+                        <div style={{ color: '#4a4a5a', textAlign: 'center', paddingTop: '70px' }}>
                             Waiting for training logs...
                         </div>
-                    ) : (
-                        logs.map((log, i) => (
-                            <div key={i} style={styles.logEntry(log.type)} className="log-entry">
-                                <span style={styles.logTime}>{log.time}</span>
-                                <span>{log.message}</span>
-                            </div>
-                        ))
-                    )}
+                    ) : logs.map((log, i) => (
+                        <div key={i} className="log-entry" style={{ padding: '4px 0', borderBottom: '1px solid #1a1a25', display: 'flex', gap: '12px' }}>
+                            <span style={{ color: '#4a4a5a', minWidth: '70px' }}>{log.time}</span>
+                            <span style={{ color: getColor(log.type) }}>{log.message}</span>
+                        </div>
+                    ))}
                 </div>
             );
         }
 
         function App() {
-            const [status, setStatus] = useState({ is_running: false, env_name: 'CartPole-v1', num_actors: 0 });
+            const [status, setStatus] = useState({ is_running: false, env_name: 'CartPole-v1', num_actors: 0, elapsed_time: 0 });
             const [metrics, setMetrics] = useState([]);
             const [summary, setSummary] = useState(null);
+            const [progress, setProgress] = useState(null);
             const [envName, setEnvName] = useState('CartPole-v1');
             const [numActors, setNumActors] = useState(4);
             const [hyperparams, setHyperparams] = useState({ lr: 0.0003, gamma: 0.99 });
             const [loading, setLoading] = useState(false);
             const [logs, setLogs] = useState([]);
-            const [batchProgress, setBatchProgress] = useState({ current: 0, target: 2048 });
+            const prevUpdates = useRef(0);
 
             const environments = [
                 { name: 'CartPole-v1', label: 'CartPole' },
                 { name: 'LunarLander-v2', label: 'Lunar Lander' },
                 { name: 'Acrobot-v1', label: 'Acrobot' },
-                { name: 'MountainCar-v0', label: 'Mountain Car' },
+                { name: 'MountainCar-v0', label: 'Mountain Car' }
             ];
 
             const addLog = useCallback((type, message) => {
                 const time = new Date().toLocaleTimeString('en-US', { hour12: false });
-                setLogs(prev => [...prev.slice(-50), { type, message, time }]);
+                setLogs(prev => [...prev.slice(-100), { type, message, time }]);
             }, []);
 
-            const fetchStatus = useCallback(async () => {
+            const fetchData = useCallback(async () => {
                 try {
-                    const res = await fetch(`${API_URL}/api/status`);
-                    const data = await res.json();
-                    setStatus(data);
-                } catch (e) {
-                    console.log('Status fetch error:', e);
-                }
-            }, []);
-
-            const fetchMetrics = useCallback(async () => {
-                try {
-                    const res = await fetch(`${API_URL}/api/metrics`);
-                    const data = await res.json();
-
-                    if (data.metrics && data.metrics.length > metrics.length) {
-                        const newMetrics = data.metrics.slice(metrics.length);
-                        newMetrics.forEach(m => {
-                            addLog('update', `Update #${m.update} | Loss: ${m.policy_loss?.toFixed(4)} | Reward: ${m.avg_reward?.toFixed(2)}`);
-                        });
-                    }
-
-                    setMetrics(data.metrics || []);
-                    setSummary(data.summary);
-
-                    if (data.summary) {
-                        setBatchProgress({
-                            current: (data.summary.total_experiences || 0) % 2048,
-                            target: 2048
-                        });
+                    const [statusRes, metricsRes] = await Promise.all([
+                        fetch(`${API_URL}/api/status`),
+                        fetch(`${API_URL}/api/metrics`)
+                    ]);
+                    const statusData = await statusRes.json();
+                    const metricsData = await metricsRes.json();
+                    
+                    setStatus(statusData);
+                    setMetrics(metricsData.metrics || []);
+                    setSummary(metricsData.summary);
+                    setProgress(metricsData.progress);
+                    
+                    // Log new updates
+                    if (metricsData.summary && metricsData.summary.updates > prevUpdates.current) {
+                        const s = metricsData.summary;
+                        const p = metricsData.progress;
+                        addLog('update', `Update #${s.updates} | Loss: ${s.policy_loss?.toFixed(4)} | Reward: ${p?.avg_episode_reward?.toFixed(1) || s.avg_reward?.toFixed(1)} | ${p?.experiences_per_second?.toFixed(0) || 0} exp/s`);
+                        prevUpdates.current = s.updates;
                     }
                 } catch (e) {
-                    console.log('Metrics fetch error:', e);
+                    console.log('Fetch error:', e);
                 }
-            }, [metrics.length, addLog]);
+            }, [addLog]);
 
             useEffect(() => {
-                fetchStatus();
-                fetchMetrics();
-                const interval = setInterval(() => {
-                    fetchStatus();
-                    fetchMetrics();
-                }, 1000);
+                fetchData();
+                const interval = setInterval(fetchData, 500);
                 return () => clearInterval(interval);
-            }, [fetchStatus, fetchMetrics]);
+            }, [fetchData]);
 
             const startTraining = async () => {
                 setLoading(true);
                 setLogs([]);
-                addLog('info', `Starting training on ${envName} with ${numActors} actors...`);
+                prevUpdates.current = 0;
+                addLog('info', `Starting ${envName} with ${numActors} actors...`);
                 try {
-                    await fetch(`${API_URL}/api/training/start?env_name=${envName}&num_actors=${numActors}`, {
-                        method: 'POST'
-                    });
-                    addLog('info', 'Training started successfully!');
-                    await fetchStatus();
+                    await fetch(`${API_URL}/api/training/start?env_name=${envName}&num_actors=${numActors}`, { method: 'POST' });
+                    addLog('info', 'Training started!');
                 } catch (e) {
-                    addLog('error', `Failed to start: ${e.message}`);
-                    console.error(e);
+                    addLog('error', `Failed: ${e.message}`);
                 }
                 setLoading(false);
             };
 
             const stopTraining = async () => {
                 setLoading(true);
-                addLog('info', 'Stopping training...');
+                addLog('info', 'Stopping...');
                 try {
                     await fetch(`${API_URL}/api/training/stop`, { method: 'POST' });
-                    addLog('info', 'Training stopped.');
-                    await fetchStatus();
+                    addLog('info', 'Stopped.');
                 } catch (e) {
-                    addLog('error', `Failed to stop: ${e.message}`);
-                    console.error(e);
+                    addLog('error', `Failed: ${e.message}`);
                 }
                 setLoading(false);
             };
 
             const updateHyperparam = async (key, value) => {
                 try {
-                    await fetch(`${API_URL}/api/config/hyperparam?key=${key}&value=${value}`, {
-                        method: 'POST'
-                    });
+                    await fetch(`${API_URL}/api/config/hyperparam?key=${key}&value=${value}`, { method: 'POST' });
                     setHyperparams(prev => ({ ...prev, [key]: value }));
-                    addLog('info', `Updated ${key} = ${value}`);
-                } catch (e) {
-                    console.error(e);
-                }
+                    addLog('info', `${key} = ${value}`);
+                } catch (e) {}
             };
 
             const scaleActors = async (count) => {
                 try {
                     await fetch(`${API_URL}/api/scale?count=${count}`, { method: 'POST' });
-                    addLog('info', `Scaled actors to ${count}`);
-                    await fetchStatus();
-                } catch (e) {
-                    console.error(e);
-                }
+                    addLog('info', `Scaled to ${count} actors`);
+                } catch (e) {}
             };
 
             return (
                 <div style={styles.container}>
-                    {/* Header */}
                     <header style={styles.header}>
                         <h1 style={styles.title}>DISTRIBUTED RL PLATFORM</h1>
                         <div style={styles.statusBadge(status.is_running)}>
@@ -488,163 +318,100 @@
                         </div>
                     </header>
 
-                    {/* Controls */}
                     <div style={styles.controlsRow}>
                         <div>
                             <label style={styles.label}>ENVIRONMENT</label>
-                            <select
-                                style={styles.select}
-                                value={envName}
-                                onChange={(e) => setEnvName(e.target.value)}
-                                disabled={status.is_running}
-                            >
-                                {environments.map(env => (
-                                    <option key={env.name} value={env.name}>{env.label}</option>
-                                ))}
+                            <select style={styles.select} value={envName} onChange={(e) => setEnvName(e.target.value)} disabled={status.is_running}>
+                                {environments.map(env => <option key={env.name} value={env.name}>{env.label}</option>)}
                             </select>
                         </div>
-
                         <div>
                             <label style={styles.label}>ACTORS</label>
-                            <input
-                                type="number"
-                                style={styles.input}
-                                value={numActors}
-                                onChange={(e) => setNumActors(parseInt(e.target.value) || 1)}
-                                min="1"
-                                max="16"
-                                disabled={status.is_running}
-                            />
+                            <input type="number" style={styles.input} value={numActors} onChange={(e) => setNumActors(parseInt(e.target.value) || 1)} min="1" max="16" disabled={status.is_running} />
                         </div>
-
                         <div style={{ marginTop: '20px' }}>
                             {!status.is_running ? (
-                                <button
-                                    style={styles.button('primary')}
-                                    onClick={startTraining}
-                                    disabled={loading}
-                                >
+                                <button style={styles.button('primary')} onClick={startTraining} disabled={loading}>
                                     {loading ? 'STARTING...' : '▶ START TRAINING'}
                                 </button>
                             ) : (
-                                <button
-                                    style={{ ...styles.button('secondary'), borderColor: '#ff4444', color: '#ff4444' }}
-                                    onClick={stopTraining}
-                                    disabled={loading}
-                                >
+                                <button style={{ ...styles.button('secondary'), borderColor: '#ff4444', color: '#ff4444' }} onClick={stopTraining} disabled={loading}>
                                     {loading ? 'STOPPING...' : '■ STOP'}
                                 </button>
                             )}
                         </div>
-
                         {status.is_running && (
                             <div style={{ marginTop: '20px', marginLeft: 'auto' }}>
-                                <button
-                                    style={styles.button('secondary')}
-                                    onClick={() => scaleActors(status.num_actors + 1)}
-                                >
-                                    + ACTOR
-                                </button>
+                                <button style={styles.button('secondary')} onClick={() => scaleActors(status.num_actors + 1)}>+ ACTOR</button>
                             </div>
                         )}
                     </div>
 
-                    {/* Progress Section */}
-                    {status.is_running && (
+                    {/* TQDM-style Progress Bars */}
+                    {status.is_running && progress && (
                         <div style={{ ...styles.card, marginBottom: '24px' }}>
                             <div style={styles.cardTitle}>TRAINING PROGRESS</div>
-                            <ProgressBar
-                                current={batchProgress.current}
-                                target={batchProgress.target}
+                            <TqdmProgress
+                                current={progress.buffer_current}
+                                total={progress.buffer_target}
                                 label="BATCH BUFFER"
+                                rate={progress.experiences_per_second}
+                                elapsed={progress.elapsed_seconds}
+                                extra={`ep:${progress.episode_count}`}
                             />
-                            <ProgressBar
-                                current={summary?.total_experiences || 0}
-                                target={100000}
-                                label="TOTAL EXPERIENCES"
+                            <TqdmProgress
+                                current={progress.total_experiences}
+                                total={100000}
+                                label="TOTAL EXPERIENCES (100K target)"
+                                rate={progress.experiences_per_second}
+                                elapsed={progress.elapsed_seconds}
+                                extra={summary ? `upd:${summary.updates}` : ''}
                             />
-                            <div style={{ display: 'flex', gap: '24px', marginTop: '16px', flexWrap: 'wrap' }}>
-                                <div style={{ color: '#9ca3af', fontSize: '12px', fontFamily: "'JetBrains Mono', monospace" }}>
-                                    Updates: <span style={{ color: '#00d4ff' }}>{summary?.updates || 0}</span>
-                                </div>
-                                <div style={{ color: '#9ca3af', fontSize: '12px', fontFamily: "'JetBrains Mono', monospace" }}>
-                                    Exp/sec: <span style={{ color: '#a855f7' }}>{((summary?.total_experiences || 0) / Math.max(1, summary?.updates || 1) * 0.5).toFixed(0)}</span>
-                                </div>
-                                <div style={{ color: '#9ca3af', fontSize: '12px', fontFamily: "'JetBrains Mono', monospace" }}>
-                                    Avg Reward: <span style={{ color: '#00ff88' }}>{summary?.avg_reward?.toFixed(2) || '0.00'}</span>
-                                </div>
+                            <div style={{ display: 'flex', gap: '24px', marginTop: '8px', flexWrap: 'wrap', fontSize: '12px', fontFamily: "'JetBrains Mono', monospace" }}>
+                                <span style={{ color: '#9ca3af' }}>Updates/min: <span style={{ color: '#00d4ff' }}>{progress.updates_per_minute?.toFixed(1) || 0}</span></span>
+                                <span style={{ color: '#9ca3af' }}>Avg Episode Reward: <span style={{ color: '#00ff88' }}>{progress.avg_episode_reward?.toFixed(1) || 0}</span></span>
                             </div>
                         </div>
                     )}
 
-                    {/* Metrics Cards */}
                     <div style={styles.grid}>
                         <div style={styles.card}>
                             <div style={styles.cardTitle}>AVG REWARD</div>
-                            <div style={styles.metricValue}>
-                                {summary?.avg_reward?.toFixed(1) || '0.0'}
-                            </div>
+                            <div style={styles.metricValue}>{summary?.avg_reward?.toFixed(1) || '0.0'}</div>
                         </div>
-
                         <div style={styles.card}>
                             <div style={styles.cardTitle}>UPDATES</div>
-                            <div style={{ ...styles.metricValue, color: '#00d4ff' }}>
-                                {summary?.updates || 0}
-                            </div>
+                            <div style={{ ...styles.metricValue, color: '#00d4ff' }}>{summary?.updates || 0}</div>
                         </div>
-
                         <div style={styles.card}>
                             <div style={styles.cardTitle}>EXPERIENCES</div>
-                            <div style={{ ...styles.metricValue, color: '#a855f7' }}>
-                                {(summary?.total_experiences || 0).toLocaleString()}
-                            </div>
+                            <div style={{ ...styles.metricValue, color: '#a855f7' }}>{(progress?.total_experiences || summary?.total_experiences || 0).toLocaleString()}</div>
                         </div>
-
                         <div style={styles.card}>
                             <div style={styles.cardTitle}>ACTIVE ACTORS</div>
-                            <div style={{ ...styles.metricValue, color: '#fbbf24' }}>
-                                {status.num_actors || 0}
-                            </div>
+                            <div style={{ ...styles.metricValue, color: '#fbbf24' }}>{status.num_actors || 0}</div>
                         </div>
                     </div>
 
-                    {/* Training Log */}
-                    <div style={styles.chartContainer}>
+                    <div style={{ ...styles.card, marginBottom: '24px' }}>
                         <div style={styles.cardTitle}>TRAINING LOG</div>
                         <TrainingLog logs={logs} />
                     </div>
 
-                    {/* Hyperparameters */}
                     <div style={styles.card}>
                         <div style={styles.cardTitle}>HYPERPARAMETERS</div>
                         <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
                             <div>
                                 <label style={styles.label}>LEARNING RATE</label>
-                                <input
-                                    type="number"
-                                    style={{ ...styles.input, width: '120px' }}
-                                    value={hyperparams.lr}
-                                    onChange={(e) => updateHyperparam('lr', parseFloat(e.target.value))}
-                                    step="0.0001"
-                                />
+                                <input type="number" style={{ ...styles.input, width: '120px' }} value={hyperparams.lr} onChange={(e) => updateHyperparam('lr', parseFloat(e.target.value))} step="0.0001" />
                             </div>
                             <div>
                                 <label style={styles.label}>GAMMA</label>
-                                <input
-                                    type="number"
-                                    style={{ ...styles.input, width: '100px' }}
-                                    value={hyperparams.gamma}
-                                    onChange={(e) => updateHyperparam('gamma', parseFloat(e.target.value))}
-                                    step="0.01"
-                                    min="0"
-                                    max="1"
-                                />
+                                <input type="number" style={{ ...styles.input, width: '100px' }} value={hyperparams.gamma} onChange={(e) => updateHyperparam('gamma', parseFloat(e.target.value))} step="0.01" min="0" max="1" />
                             </div>
                             <div>
                                 <label style={styles.label}>POLICY LOSS</label>
-                                <div style={{ ...styles.metricValue, fontSize: '20px', color: '#ff4444' }}>
-                                    {summary?.policy_loss?.toFixed(4) || '0.0000'}
-                                </div>
+                                <div style={{ ...styles.metricValue, fontSize: '20px', color: '#ff4444' }}>{summary?.policy_loss?.toFixed(4) || '0.0000'}</div>
                             </div>
                         </div>
                     </div>
@@ -655,5 +422,4 @@
         ReactDOM.createRoot(document.getElementById('root')).render(<App />);
     </script>
 </body>
-
 </html>
