@@ -10,6 +10,7 @@ import gymnasium as gym
 class Learner:
     def __init__(self, env_name, kafka_bootstrap, batch_size=2048):
         self.env_name = env_name
+        self.kafka_bootstrap = kafka_bootstrap
         self.batch_size = batch_size
         
         # Initialize agent
@@ -41,6 +42,10 @@ class Learner:
         # Training state
         self.is_training = True
         self.total_experiences = 0
+        
+        # Auto-stop settings (configurable via env vars)
+        self.max_experiences = int(os.environ.get('MAX_EXPERIENCES', 100000))
+        self.solve_reward = float(os.environ.get('SOLVE_REWARD', 195.0))
     
     def consume_experiences(self):
         """Background thread to consume experiences"""
@@ -49,6 +54,27 @@ class Learner:
                 break
             self.experience_buffer.append(message.value)
             self.total_experiences += 1
+    
+    def consume_commands(self):
+        """Listen for control commands"""
+        cmd_consumer = KafkaConsumer(
+            'commands.control',
+            bootstrap_servers=self.kafka_bootstrap,
+            value_deserializer=lambda v: json.loads(v.decode('utf-8')),
+            auto_offset_reset='latest',
+            group_id='learner-commands'
+        )
+        for message in cmd_consumer:
+            cmd = message.value.get('command')
+            if cmd == 'stop':
+                print("Received stop command")
+                self.is_training = False
+                break
+            elif cmd == 'set_hyperparam':
+                key = message.value.get('key')
+                value = message.value.get('value')
+                self.set_hyperparam(key, value)
+                print(f"Updated {key} = {value}")
     
     def train_step(self):
         if len(self.experience_buffer) < self.batch_size:
@@ -81,6 +107,23 @@ class Learner:
         self.metrics_history.append(metrics)
         return metrics
     
+    def check_auto_stop(self):
+        """Check if training should auto-stop"""
+        # Stop at experience limit
+        if self.total_experiences >= self.max_experiences:
+            print(f"Reached {self.max_experiences} experiences. Auto-stopping.")
+            return True
+        
+        # Stop when solved (check last 10 updates)
+        if len(self.metrics_history) >= 10:
+            recent_rewards = [m['avg_reward'] for m in self.metrics_history[-10:]]
+            avg = sum(recent_rewards) / len(recent_rewards)
+            if avg >= self.solve_reward:
+                print(f"Solved! Avg reward {avg:.1f} >= {self.solve_reward}. Auto-stopping.")
+                return True
+        
+        return False
+    
     def save_weights(self, path):
         self.agent.save(path)
     
@@ -99,10 +142,15 @@ class Learner:
     
     def run(self, weights_path, save_interval=10):
         print(f"Learner starting for {self.env_name}")
+        print(f"Auto-stop: {self.max_experiences} experiences or reward >= {self.solve_reward}")
         
         # Start consumer thread
         consumer_thread = threading.Thread(target=self.consume_experiences, daemon=True)
         consumer_thread.start()
+        
+        # Start command listener thread
+        cmd_thread = threading.Thread(target=self.consume_commands, daemon=True)
+        cmd_thread.start()
         
         while self.is_training:
             metrics = self.train_step()
@@ -110,16 +158,29 @@ class Learner:
             if metrics:
                 print(f"Update {self.update_count} | Loss: {metrics['policy_loss']:.4f} | Avg Reward: {metrics['avg_reward']:.2f}")
                 
+                # Save periodically
                 if self.update_count % save_interval == 0:
                     self.save_weights(weights_path)
                     print(f"Saved weights to {weights_path}")
+                
+                # Check auto-stop conditions
+                if self.check_auto_stop():
+                    self.is_training = False
             
-            time.sleep(0.1)  # Avoid busy loop
+            time.sleep(0.1)
+        
+        # Save final weights on stop
+        self.save_weights(weights_path)
+        print("Training stopped. Final weights saved.")
+        
+        # Send stop signal to actors
+        self.producer.send('commands.control', {'command': 'stop'})
+        self.producer.flush()
 
 
 if __name__ == "__main__":
     env_name = os.environ.get('ENV_NAME', 'CartPole-v1')
-    kafka_bootstrap = os.environ.get('KAFKA_BOOTSTRAP', 'localhost:9092')
+    kafka_bootstrap = os.environ.get('KAFKA_BOOTSTRAP', 'localhost:9093')
     weights_path = os.environ.get('WEIGHTS_PATH', '/shared/model.pt')
     batch_size = int(os.environ.get('BATCH_SIZE', 2048))
     
