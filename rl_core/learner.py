@@ -62,7 +62,7 @@ class Learner:
             bootstrap_servers=self.kafka_bootstrap,
             value_deserializer=lambda v: json.loads(v.decode('utf-8')),
             auto_offset_reset='latest',
-            group_id='learner-commands'
+            group_id=f'learner-commands-{int(time.time())}'
         )
         for message in cmd_consumer:
             cmd = message.value.get('command')
@@ -162,10 +162,10 @@ class Learner:
                 if self.update_count % save_interval == 0:
                     self.save_weights(weights_path)
                     print(f"Saved weights to {weights_path}")
-                
-                # Check auto-stop conditions
-                if self.check_auto_stop():
-                    self.is_training = False
+            
+            # Check auto-stop always, not just after training step
+            if self.check_auto_stop():
+                self.is_training = False
             
             time.sleep(0.1)
         
