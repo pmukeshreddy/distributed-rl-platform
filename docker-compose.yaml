@@ -22,7 +22,7 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
     healthcheck:
-      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      test: [ "CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -39,6 +39,8 @@ services:
       KAFKA_BOOTSTRAP: kafka:9092
       WEIGHTS_PATH: /shared/model.pt
       BATCH_SIZE: 2048
+      MAX_EXPERIENCES: 100000
+      SOLVE_REWARD: 195.0
     volumes:
       - shared-weights:/shared
 
@@ -70,6 +72,40 @@ services:
         condition: service_started
     environment:
       ACTOR_ID: 2
+      ENV_NAME: CartPole-v1
+      KAFKA_BOOTSTRAP: kafka:9092
+      WEIGHTS_PATH: /shared/model.pt
+    volumes:
+      - shared-weights:/shared
+
+  actor-3:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.actor
+    depends_on:
+      kafka:
+        condition: service_healthy
+      learner:
+        condition: service_started
+    environment:
+      ACTOR_ID: 3
+      ENV_NAME: CartPole-v1
+      KAFKA_BOOTSTRAP: kafka:9092
+      WEIGHTS_PATH: /shared/model.pt
+    volumes:
+      - shared-weights:/shared
+
+  actor-4:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.actor
+    depends_on:
+      kafka:
+        condition: service_healthy
+      learner:
+        condition: service_started
+    environment:
+      ACTOR_ID: 4
       ENV_NAME: CartPole-v1
       KAFKA_BOOTSTRAP: kafka:9092
       WEIGHTS_PATH: /shared/model.pt
