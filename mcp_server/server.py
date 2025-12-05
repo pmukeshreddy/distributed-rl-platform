@@ -6,7 +6,6 @@ import core
 
 app = Server("rl-training-server")
 
-# Start background consumer
 core.start_metrics_consumer()
 
 
@@ -15,7 +14,11 @@ async def list_tools() -> list[Tool]:
     return [
         Tool(
             name="start_training",
-            description="Start distributed RL training with specified environment and number of actors",
+            description="Initialize and launch a distributed reinforcement learning training session using the PPO algorithm. "
+                        "This tool spawns multiple actor processes that collect experience trajectories in parallel from the specified OpenAI Gym environment. "
+                        "The learner process aggregates experiences, computes policy gradients, and updates the shared neural network weights. "
+                        "Supports both discrete and continuous action spaces. "
+                        "Training progress and metrics are streamed via Kafka for real-time monitoring.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -27,17 +30,27 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="stop_training",
-            description="Stop all training processes",
+            description="Gracefully terminate all active training processes including actor pods, the learner process, and any associated Kubernetes resources. "
+                        "This performs a clean shutdown by allowing in-flight experience batches to complete, saving the current model checkpoint to persistent storage, "
+                        "flushing all pending metrics to Kafka, and deallocating GPU/CPU resources. "
+                        "Use this before scaling down infrastructure or switching environments.",
             inputSchema={"type": "object", "properties": {}}
         ),
         Tool(
             name="get_metrics",
-            description="Get current training metrics",
+            description="Retrieve comprehensive training metrics aggregated from all actor processes. "
+                        "Returns episode rewards (mean, min, max, std), policy loss, value function loss, entropy bonus, KL divergence from previous policy, "
+                        "explained variance, frames per second throughput, total environment steps completed, and wall-clock training time. "
+                        "Metrics are computed over a rolling window of recent episodes for stability.",
             inputSchema={"type": "object", "properties": {}}
         ),
         Tool(
             name="set_hyperparam",
-            description="Update a hyperparameter during training",
+            description="Dynamically modify a hyperparameter during active training without restarting the session. "
+                        "Changes propagate to all actor and learner processes on the next optimization step. "
+                        "Useful for implementing learning rate schedules, adjusting exploration-exploitation tradeoffs via entropy coefficient, "
+                        "or tuning PPO's clipping ratio based on observed KL divergence. "
+                        "Changes are logged and can be correlated with metric shifts.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -49,7 +62,10 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="scale_actors",
-            description="Scale the number of actor pods",
+            description="Horizontally scale the number of actor pods in the Kubernetes cluster to adjust training throughput. "
+                        "More actors increase environment sample collection rate, enabling faster policy updates but consuming more compute resources. "
+                        "Scaling is performed via Kubernetes HPA with zero-downtime rolling updates. "
+                        "New actors automatically sync with the latest policy weights and begin contributing experiences immediately.",
             inputSchema={
                 "type": "object",
                 "properties": {"count": {"type": "integer", "minimum": 1, "maximum": 16}},
@@ -58,12 +74,19 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="get_config",
-            description="Get current training configuration",
+            description="Fetch the complete current training configuration including all hyperparameters "
+                        "(learning rate, gamma, lambda for GAE, clip ratio, entropy coefficient, value loss coefficient), "
+                        "network architecture details (hidden layer sizes, activation functions), environment settings, "
+                        "batch and minibatch sizes, number of PPO epochs per update, gradient clipping thresholds, "
+                        "and Kubernetes resource allocations for actors and learner.",
             inputSchema={"type": "object", "properties": {}}
         ),
         Tool(
             name="list_environments",
-            description="List available Gym environments",
+            description="Enumerate all available OpenAI Gym environments that are compatible with this distributed training framework. "
+                        "Returns environment IDs grouped by category (Classic Control, Box2D, MuJoCo, Atari), "
+                        "along with observation space dimensions, action space type and size, reward range, and maximum episode length. "
+                        "Helps in selecting appropriate environments for benchmarking or experimentation.",
             inputSchema={"type": "object", "properties": {}}
         )
     ]
