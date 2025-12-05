@@ -93,9 +93,11 @@ class Learner:
         metrics = self.agent.update(batch)
         self.update_count += 1
         
-        # Compute average episode reward from batch
-        rewards = [e['reward'] for e in batch]
-        avg_reward = sum(rewards) / len(rewards)
+
+
+        episode_rewards = [e.get('episode_reward') for e in batch if e.get('done') and e.get('episode_reward')]
+        avg_reward = sum(episode_rewards) / len(episode_rewards) if episode_rewards else 0.0
+
         
         metrics.update({
             'update': self.update_count,
