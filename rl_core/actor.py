@@ -37,6 +37,11 @@ class Actor:
             auto_offset_reset='latest',
             group_id=f'actor-{self.actor_id}-commands'
         )
+        # Wait for partition assignment, then skip to end
+        cmd_consumer.poll(timeout_ms=2000)
+        for tp in cmd_consumer.assignment():
+            cmd_consumer.seek_to_end(tp)
+        
         for message in cmd_consumer:
             cmd = message.value.get('command')
             if cmd == 'stop':
