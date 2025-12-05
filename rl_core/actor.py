@@ -67,6 +67,8 @@ class Actor:
             next_state, reward, terminated, truncated, _ = self.env.step(action)
             done = terminated or truncated
             
+            episode_reward += reward
+            
             experience = {
                 'actor_id': self.actor_id,
                 'state': state.tolist(),
@@ -76,6 +78,7 @@ class Actor:
                 'done': done,
                 'log_prob': log_prob,
                 'value': value,
+                'episode_reward': episode_reward if done else None,
                 'timestamp': time.time()
             }
             experiences.append(experience)
@@ -83,7 +86,6 @@ class Actor:
             # Send to Kafka
             self.producer.send('experiences.raw', experience)
             
-            episode_reward += reward
             self.total_steps += 1
             state = next_state
             
