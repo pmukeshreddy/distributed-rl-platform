@@ -93,6 +93,14 @@ async def websocket_metrics(websocket: WebSocket):
         connected_websockets.remove(websocket)
 
 
+from fastapi.responses import FileResponse
+from pathlib import Path
+
+@app.get("/ui")
+async def serve_ui():
+    return FileResponse(Path(__file__).parent.parent / "frontend" / "index.html")
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
