@@ -16,7 +16,6 @@ training_state = {
     'config': {'lr': 3e-4, 'gamma': 0.99, 'clip_ratio': 0.2, 'batch_size': 2048},
     'metrics': deque(maxlen=500),
     'actor_metrics': deque(maxlen=100),
-    # Buffer tracking
     'buffer_size': 0,
     'total_experiences': 0,
     'start_time': None,
@@ -30,6 +29,7 @@ _producer = None
 _k8s_client = None
 _consumer_started = None
 
+
 def get_producer():
     global _producer
     if _producer is None:
@@ -38,6 +38,7 @@ def get_producer():
             value_serializer=lambda v: json.dumps(v).encode('utf-8')
         )
     return _producer
+
 
 def get_k8s():
     global _k8s_client
@@ -63,41 +64,51 @@ def start_metrics_consumer():
     def consume():
         last_exp_time = time.time()
         last_exp_count = 0
+        group_id = f'core-metrics-{int(time.time())}'
         
         try:
             consumer = KafkaConsumer(
-                'metrics.training', 'metrics.actors', 'experiences.raw',
+                'metrics.training', 'metrics.actors', 'experiences.raw', 'commands.control',
                 bootstrap_servers=KAFKA_BOOTSTRAP,
                 value_deserializer=lambda v: json.loads(v.decode('utf-8')), 
                 auto_offset_reset='latest',
-                group_id='core-metrics'
+                group_id=group_id
             )
+            
+            consumer.poll(timeout_ms=2000)
+            for tp in consumer.assignment():
+                consumer.seek_to_end(tp)
+            
             for message in consumer:
                 if message.topic == "metrics.training":
-                    training_state["metrics"].append(message.value)
-                    # Reset buffer after each training update
-                    training_state["buffer_size"] = 0
-                    training_state["last_update_time"] = time.time()
+                    if training_state["is_running"]:
+                        training_state["metrics"].append(message.value)
+                        training_state["buffer_size"] = 0
+                        training_state["last_update_time"] = time.time()
                     
                 elif message.topic == "metrics.actors":
-                    training_state["actor_metrics"].append(message.value)
-                    # Track episode rewards
-                    if 'reward' in message.value:
-                        training_state["recent_rewards"].append(message.value['reward'])
-                    training_state["episode_count"] += 1
+                    if training_state["is_running"]:
+                        training_state["actor_metrics"].append(message.value)
+                        if 'reward' in message.value:
+                            training_state["recent_rewards"].append(message.value['reward'])
+                        training_state["episode_count"] += 1
                     
                 elif message.topic == "experiences.raw":
-                    training_state["buffer_size"] += 1
-                    training_state["total_experiences"] += 1
-                    
-                    # Calculate experiences per second
-                    now = time.time()
-                    elapsed = now - last_exp_time
-                    if elapsed >= 1.0:
-                        exp_diff = training_state["total_experiences"] - last_exp_count
-                        training_state["experiences_per_second"] = exp_diff / elapsed
-                        last_exp_time = now
-                        last_exp_count = training_state["total_experiences"]
+                    if training_state["is_running"]:
+                        training_state["buffer_size"] += 1
+                        training_state["total_experiences"] += 1
+                        
+                        now = time.time()
+                        elapsed = now - last_exp_time
+                        if elapsed >= 1.0:
+                            exp_diff = training_state["total_experiences"] - last_exp_count
+                            training_state["experiences_per_second"] = exp_diff / elapsed
+                            last_exp_time = now
+                            last_exp_count = training_state["total_experiences"]
+                
+                elif message.topic == "commands.control":
+                    if message.value.get('command') == 'stop':
+                        training_state["is_running"] = False
                         
         except Exception as e:
             print(f"Kafka consumer error: {e}")
@@ -106,7 +117,6 @@ def start_metrics_consumer():
 
 
 def start_training(env_name: str = "CartPole-v1", num_actors: int = 4) -> dict:
-    # Reset state
     training_state["is_running"] = True
     training_state["env_name"] = env_name
     training_state["num_actors"] = num_actors
@@ -180,7 +190,6 @@ def get_status() -> dict:
         except:
             pass
     
-    # Calculate elapsed time
     elapsed = 0
     if training_state['start_time'] and training_state['is_running']:
         elapsed = time.time() - training_state['start_time']
@@ -196,15 +205,29 @@ def get_status() -> dict:
 
 
 def get_metrics() -> dict:
+    if not training_state['is_running']:
+        return {
+            'metrics': [],
+            'summary': None,
+            'progress': {
+                'buffer_current': 0,
+                'buffer_target': training_state['config'].get('batch_size', 2048),
+                'buffer_percent': 0,
+                'total_experiences': 0,
+                'experiences_per_second': 0,
+                'episode_count': 0,
+                'elapsed_seconds': 0,
+                'avg_episode_reward': 0
+            }
+        }
+    
     metrics = list(training_state['metrics'])
     batch_size = training_state['config'].get('batch_size', 2048)
     
-    # Calculate timing
     elapsed = 0
-    if training_state['start_time'] and training_state['is_running']:
+    if training_state['start_time']:
         elapsed = time.time() - training_state['start_time']
     
-    # Recent episode rewards from actors
     recent_rewards = list(training_state['recent_rewards'])
     avg_episode_reward = sum(recent_rewards) / len(recent_rewards) if recent_rewards else 0
     
